@@ -11,8 +11,8 @@
 "  Description: C# Commenter Vim Plugin
 "   Maintainer: Aaron Jensen (aj at mostafa dot net)
 "          URL: none
-"  Last Change: 19 November 2002
-"      Version: 1.3
+"  Last Change: 20 November 2002
+"      Version: 1.3a
 "        Usage: Normally, this file should reside in the plugins
 "               directory and be automatically sourced. If not, you must
 "               manually source this file using ':source cscomment.vim'.
@@ -25,7 +25,15 @@
 "
 "               <tab> - Next tag's text
 "               <s-tab> - Previous tag's text
-"      History: Version 1.3
+"      History: Version 1.3a
+"               -Fixed bug with insert point reworking
+"               -Finished backspace support, it now backspaces the /// in one
+"                backspace
+"               Anyone have a suggestion for restoring key mappings (like when to
+"               call the restore function... and autocmd or something?  <esc> seems
+"               too unreliable.
+"
+"               Version 1.3
 "               -Fixed bug with things not getting unmapped properly
 "               -Made it so properties now get a value tag
 "               -Reworked the way the insert point is found after a tab/s-tab
@@ -188,14 +196,14 @@ function! <SID>CS_Comment()
   let b:oldesc = maparg("<esc>","i")
   let b:oldtab = maparg("<tab>","i")
   let b:oldstab = maparg("<s-tab>","i")
-"  let b:oldbs = maparg("<bs>","i")
+  let b:oldbs = maparg("<bs>","i")
 
   " make new mappings
   inoremap <silent> <buffer> <cr> <cr>///<space>
   inoremap <silent> <buffer> <esc> <esc>:silent call <SID>CS_Comment_End()<cr>
   inoremap <silent> <buffer> <tab> <esc>:silent call <SID>CS_Comment_Next()<cr>
   inoremap <silent> <buffer> <s-tab> <esc>:silent call <SID>CS_Comment_Prev()<cr>
-"  inoremap <silent> <buffer> <bs> <bs><c-o>:silent call <SID>CS_Comment_BS()<cr>
+  inoremap <silent> <buffer> <bs> <c-o>:silent call <SID>CS_Comment_BS()<cr><bs>
 
   startinsert
 endfunction
@@ -207,7 +215,7 @@ function! <SID>CS_Comment_End()
   iunmap <buffer> <esc>
   iunmap <buffer> <tab>
   iunmap <buffer> <s-tab>
-  "iunmap <buffer> <bs>
+  iunmap <buffer> <bs>
   if (strlen(b:oldcr))
     exec "inoremap <buffer> <cr> " . b:oldcr
   endif
@@ -221,12 +229,9 @@ function! <SID>CS_Comment_End()
     exec "inoremap <buffer> <s-tab> " . b:oldstab
   endif
   if (strlen(b:oldbs))
-    "exec "inoremap <buffer> <bs> " . b:oldbs
+    exec "inoremap <buffer> <bs> " . b:oldbs
   endif
 endfunction
-
-" match the end of a text node in a tag:
-" <\(.*\)>\_.\{-}\zs\ze\%(\n[ \t]*\/\/\/[ \t]*\)\?<\/\1>
 
 function! <SID>CS_Comment_Next()
   if b:i < b:n
@@ -236,9 +241,11 @@ function! <SID>CS_Comment_Next()
   endif
 
   exec "normal! `" . nr2char(b:i + 97)
-  exec "normal! h/<\\(.*\\)>\\_.\\{-}\\zs\\ze\\(\\n[ \t]*\\/\\/\\/[ \t]*\\)\\=<\\/\\1>\<cr>"
+  exec "normal! h/<\\([^ ]\\{-}\\)\\%( .\\{-}\\)\\=>\\_.\\{-}\\zs\\ze\\%(\\n[ \\t]*\\/\\/\\/ \\)\\=<\\/\\1>\<cr>"
   startinsert
 endfunction
+
+"<\([^ ]\{-}\)\%( .\{-}\)\=>\_.\{-}\zs\ze\%(\n[ \t]*\/\/\/ \)\=<\/\1>"
 
 function! <SID>CS_Comment_Prev()
   if b:i > 0
@@ -248,21 +255,20 @@ function! <SID>CS_Comment_Prev()
   endif
 
   exec "normal! `" . nr2char(b:i + 97)
-  exec "normal! h/<\\(.*\\)>\\_.\\{-}\\zs\\ze\\(\\n[ \t]*\\/\\/\\/[ \t]*\\)\\=<\\/\\1>\<cr>"
+  exec "normal! h/<\\([^ ]\\{-}\\)\\%( .\\{-}\\)\\=>\\_.\\{-}\\zs\\ze\\%(\\n[ \\t]*\\/\\/\\/ \\)\\=<\\/\\1>\<cr>"
   startinsert
 endfunction
 
 function! <SID>CS_Comment_BS()
   let l:a_back = @a
-  set ve=
 
   " get the beginning of the line to this point
-  "normal! mz"ay^`z
+  y a
+  let @a = strpart(@a, 0, col('.') - 1)
   " delete the whole line if we're backspacing over the ///
-  if (@a == "///")
-    "exe "normal! d?\\n\<cr>"
+  if (@a =~ "[ \t]*/// $")
+    exe "normal! d0"
   endif
-  set ve=all
 
   let @a = l:a_back
 endfunction
