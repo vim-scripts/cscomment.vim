@@ -25,7 +25,12 @@
 "
 "               <tab> - Next tag's text
 "               <s-tab> - Previous tag's text
-"      History: Version 1.3a
+"      History: Version 1.3b
+"               -Interfaces are no longer treated as properties
+"               -Formal ref params are now handled properly
+"               -Fixed backspace so it works on the last character.
+"
+"               Version 1.3a
 "               -Fixed bug with insert point reworking
 "               -Finished backspace support, it now backspaces the /// in one
 "                backspace
@@ -52,6 +57,7 @@
 "
 "               Version 1.0
 "               -Initial release.
+"         Todo:
 "
 "=============================================================================
 
@@ -102,7 +108,7 @@ function! <SID>CS_Comment()
   " get the return type, or access modifier if its a constructor
   let l:rt = matchstr(@a, "\\h\\w*\\ze[ \t\n]\\+\\h\\w*[ \t\n]*([^)]*)")
 
-  let l:isprop = match(@a, "\\%(\\<class\\>\\|(\\_.*)\\)") == -1
+  let l:isprop = match(@a, "\\%(\\<class\\>\\|\\<interface\\>\\|(\\_.*)\\)") == -1
 
   " get the params
   let l:params = matchstr(@a, "\\h\\w*[ \t\n]*([ \t\n]*\\zs[^)]*\\ze[ \t\n]*)")
@@ -151,7 +157,7 @@ function! <SID>CS_Comment()
       let b:i = b:i + 1
       let l:m = nr2char(b:i + 97)
 
-      let l:param = matchstr(l:params, "\\h\\w*[ \t\n]\\+\\zs\\h\\w*")
+      let l:param = matchstr(l:params, "\\(ref \\)\\=\\h\\w*[ \t\n]\\+\\zs\\h\\w*")
       exe "normal! o/// \<esc>m" . l:m . "a<param name=\"" . l:param . "\">"
 
       if (l:hadcomment)
@@ -268,6 +274,9 @@ function! <SID>CS_Comment_BS()
   " delete the whole line if we're backspacing over the ///
   if (@a =~ "[ \t]*/// $")
     exe "normal! d0"
+  elseif (col('.') == col('$'))
+    " hack to fix the can't backspace over last character if coming from ctrl-o bug (sigh)
+    exe "normal! Xl"
   endif
 
   let @a = l:a_back
