@@ -12,7 +12,7 @@
 "   Maintainer: Aaron Jensen (aj at mostafa dot net)
 "          URL: none
 "  Last Change: 19 November 2002
-"      Version: 1.2
+"      Version: 1.3
 "        Usage: Normally, this file should reside in the plugins
 "               directory and be automatically sourced. If not, you must
 "               manually source this file using ':source cscomment.vim'.
@@ -25,7 +25,13 @@
 "
 "               <tab> - Next tag's text
 "               <s-tab> - Previous tag's text
-"      History: Version 1.2
+"      History: Version 1.3
+"               -Fixed bug with things not getting unmapped properly
+"               -Made it so properties now get a value tag
+"               -Reworked the way the insert point is found after a tab/s-tab
+"               -All tags now start out on one line
+"
+"               Version 1.2
 "               -Commenter now allows you to edit your comments and will
 "                reshape them as necessary (add params, remove them, etc.)
 "               -Now restores previous imappings
@@ -88,69 +94,92 @@ function! <SID>CS_Comment()
   " get the return type, or access modifier if its a constructor
   let l:rt = matchstr(@a, "\\h\\w*\\ze[ \t\n]\\+\\h\\w*[ \t\n]*([^)]*)")
 
+  let l:isprop = match(@a, "\\%(\\<class\\>\\|(\\_.*)\\)") == -1
+
   " get the params
   let l:params = matchstr(@a, "\\h\\w*[ \t\n]*([ \t\n]*\\zs[^)]*\\ze[ \t\n]*)")
 
   " insert summary info
-  exe "normal! O/// <summary>"
+  exe "normal! O/// \<esc>maa<summary>"
 
   " if we have a comment and a summary
   if (l:hadcomment)
     set paste
-    exe "normal! a" . matchstr(@c, "<summary>\\zs\\_.\\{-}\\ze\\(\n[ \t]*///[ \t]*\\)\\?</summary>")
+    exe "normal! a" . matchstr(@c, "<summary>\\zs\\_.\\{-}\\(\n[ \t]*///[ \t]*\\)\\?\\ze</summary>")
     set nopaste
   endif
 
-  exe "normal! mao/// </summary>"
+  exe "normal! a</summary>"
 
   " insert remarks info
-  exe "normal! o/// <remarks>"
+  exe "normal! o/// \<esc>mba<remarks>"
 
   " if we have a comment and a remarks
   if (l:hadcomment)
     set paste
-    exe "normal! a" . matchstr(@c, "<remarks>\\zs\\_.\\{-}\\ze\\(\n[ \t]*///[ \t]*\\)\\?</remarks>")
+    exe "normal! a" . matchstr(@c, "<remarks>\\zs\\_.\\{-}\\(\n[ \t]*///[ \t]*\\)\\?\\ze</remarks>")
     set nopaste
   endif
 
-  exe "normal! mbo/// </remarks>"
+  exe "normal! a</remarks>"
 
-  " go through the params and add their tags
-  while strlen(l:params) > 0
-    let b:i = b:i + 1
-    let l:m = nr2char(b:i + 97)
+  " if this is a property, add value, otherwise add params and returns
+  if (l:isprop)
+    " insert value info
+    exe "normal! o/// \<esc>mca<value>"
 
-    let l:param = matchstr(l:params, "\\h\\w*[ \t\n]\\+\\zs\\h\\w*")
-    exe "normal! o/// <param name=\"" . l:param . "\">"
-
+    " if we have a comment and a value
     if (l:hadcomment)
       set paste
-      exe "normal! a" . matchstr(@c, "<param name=\"" . l:param . "\">\\zs\\_.\\{-}\\ze</param>")
+      exe "normal! a" . matchstr(@c, "<value>\\zs\\_.\\{-}\\(\n[ \t]*///[ \t]*\\)\\?\\ze</value>")
       set nopaste
     endif
 
-    exe "normal! m" . l:m . "a</param>"
-
-    let l:params = matchstr(l:params, ",\\zs[^)]*")
-  endwhile
-
-  " if we return something, add the returns tag
-  if (strlen(l:rt) > 0 && l:rt != "void" && l:rt != "public" && l:rt != "private" && l:rt != "protected")
+    exe "normal! a</value>"
     let b:i = b:i + 1
-    let l:m = nr2char(b:i + 97)
-    exe "normal! o/// <returns>"
-    if (l:hadcomment)
-      set paste
-      exe "normal! a" . matchstr(@c, "<returns>\\zs\\_.\\{-}\\ze\\(\n[ \t]*///[ \t]*\\)\\?</returns>")
-      set nopaste
+  else
+    " go through the params and add their tags
+    while strlen(l:params) > 0
+      let b:i = b:i + 1
+      let l:m = nr2char(b:i + 97)
+
+      let l:param = matchstr(l:params, "\\h\\w*[ \t\n]\\+\\zs\\h\\w*")
+      exe "normal! o/// \<esc>m" . l:m . "a<param name=\"" . l:param . "\">"
+
+      if (l:hadcomment)
+        set paste
+        exe "normal! a" . matchstr(@c, "<param name=\"" . l:param . "\">\\zs\\_.\\{-}\\ze</param>")
+        set nopaste
+      endif
+
+      exe "normal! a</param>"
+
+      let l:params = matchstr(l:params, ",\\zs[^)]*")
+    endwhile
+
+    " if we return something, add the returns tag
+    if (strlen(l:rt) > 0 && l:rt != "void" && l:rt != "public" && l:rt != "private" && l:rt != "protected")
+      let b:i = b:i + 1
+      let l:m = nr2char(b:i + 97)
+      exe "normal! o/// \<esc>m" . l:m . "a<returns>"
+      if (l:hadcomment)
+        set paste
+        exe "normal! a" . matchstr(@c, "<returns>\\zs\\_.\\{-}\\ze\\(\n[ \t]*///[ \t]*\\)\\?</returns>")
+        set nopaste
+      endif
+      exe "normal! a</returns>"
     endif
-    exe "normal! m" . l:m . "a</returns>"
   endif
 
   " go back to the summary.
-  normal! `al
+  normal! `a
+  exec "normal! h/<\\(.*\\)>\\_.\\{-}\\zs\\ze\\(\\n[ \t]*\\/\\/\\/[ \t]*\\)\\=<\\/\\1>\<cr>"
+
+  " remember what the last mark was
   let b:n = b:i
   let b:i = 0
+
+  " restore the registers
   let @a = l:a_back
   let @c = l:c_back
 
@@ -159,12 +188,14 @@ function! <SID>CS_Comment()
   let b:oldesc = maparg("<esc>","i")
   let b:oldtab = maparg("<tab>","i")
   let b:oldstab = maparg("<s-tab>","i")
+"  let b:oldbs = maparg("<bs>","i")
 
   " make new mappings
   inoremap <silent> <buffer> <cr> <cr>///<space>
-  inoremap <silent> <buffer> <esc> <esc>:call <SID>CS_Comment_End()<cr>
-  inoremap <silent> <buffer> <tab> <esc>:call <SID>CS_Comment_Next()<cr>
-  inoremap <silent> <buffer> <s-tab> <esc>:call <SID>CS_Comment_Prev()<cr>
+  inoremap <silent> <buffer> <esc> <esc>:silent call <SID>CS_Comment_End()<cr>
+  inoremap <silent> <buffer> <tab> <esc>:silent call <SID>CS_Comment_Next()<cr>
+  inoremap <silent> <buffer> <s-tab> <esc>:silent call <SID>CS_Comment_Prev()<cr>
+"  inoremap <silent> <buffer> <bs> <bs><c-o>:silent call <SID>CS_Comment_BS()<cr>
 
   startinsert
 endfunction
@@ -172,6 +203,11 @@ endfunction
 function! <SID>CS_Comment_End()
   " fix everything
   let &virtualedit = b:old_ve
+  iunmap <buffer> <cr>
+  iunmap <buffer> <esc>
+  iunmap <buffer> <tab>
+  iunmap <buffer> <s-tab>
+  "iunmap <buffer> <bs>
   if (strlen(b:oldcr))
     exec "inoremap <buffer> <cr> " . b:oldcr
   endif
@@ -184,28 +220,49 @@ function! <SID>CS_Comment_End()
   if (strlen(b:oldstab))
     exec "inoremap <buffer> <s-tab> " . b:oldstab
   endif
+  if (strlen(b:oldbs))
+    "exec "inoremap <buffer> <bs> " . b:oldbs
+  endif
 endfunction
 
+" match the end of a text node in a tag:
+" <\(.*\)>\_.\{-}\zs\ze\%(\n[ \t]*\/\/\/[ \t]*\)\?<\/\1>
+
 function! <SID>CS_Comment_Next()
-  exec "normal! m" . nr2char(b:i + 97)
   if b:i < b:n
     let b:i = b:i + 1
   else
     let b:i = 0
   endif
 
-  exec "normal! `" . nr2char(b:i + 97) ."l"
+  exec "normal! `" . nr2char(b:i + 97)
+  exec "normal! h/<\\(.*\\)>\\_.\\{-}\\zs\\ze\\(\\n[ \t]*\\/\\/\\/[ \t]*\\)\\=<\\/\\1>\<cr>"
   startinsert
 endfunction
 
 function! <SID>CS_Comment_Prev()
-  exec "normal! m" . nr2char(b:i + 97)
   if b:i > 0
     let b:i = b:i - 1
   else
     let b:i = b:n
   endif
 
-  exec "normal! `" . nr2char(b:i + 97) ."l"
+  exec "normal! `" . nr2char(b:i + 97)
+  exec "normal! h/<\\(.*\\)>\\_.\\{-}\\zs\\ze\\(\\n[ \t]*\\/\\/\\/[ \t]*\\)\\=<\\/\\1>\<cr>"
   startinsert
+endfunction
+
+function! <SID>CS_Comment_BS()
+  let l:a_back = @a
+  set ve=
+
+  " get the beginning of the line to this point
+  "normal! mz"ay^`z
+  " delete the whole line if we're backspacing over the ///
+  if (@a == "///")
+    "exe "normal! d?\\n\<cr>"
+  endif
+  set ve=all
+
+  let @a = l:a_back
 endfunction
